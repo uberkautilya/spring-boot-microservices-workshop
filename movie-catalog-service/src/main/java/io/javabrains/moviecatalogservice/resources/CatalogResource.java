@@ -1,5 +1,6 @@
 package io.javabrains.moviecatalogservice.resources;
 
+import com.netflix.hystrix.contrib.javanica.annotation.HystrixCommand;
 import io.javabrains.moviecatalogservice.models.CatalogItem;
 import io.javabrains.moviecatalogservice.models.Movie;
 import io.javabrains.moviecatalogservice.models.Rating;
@@ -29,15 +30,33 @@ public class CatalogResource {
     @RequestMapping("/{userId}")
     public List<CatalogItem> getCatalog(@PathVariable("userId") String userId) {
 
-        UserRating userRating = restTemplate.getForObject("http://ratings-data-service/ratingsdata/user/" + userId, UserRating.class);
+        UserRating userRating = getUserRatingInformation(userId);
 
         return userRating.getRatings().stream()
                 .map(rating -> {
-                    Movie movie = restTemplate.getForObject("http://movie-info-service/movies/" + rating.getMovieId(), Movie.class);
+                    Movie movie = getMovieInformation(rating);
                     return new CatalogItem(movie.getName(), movie.getDescription(), rating.getRating());
                 })
                 .collect(Collectors.toList());
 
+    }
+
+    @HystrixCommand(fallbackMethod = "getUserRatingInformationFallback")
+    private UserRating getUserRatingInformation(String userId) {
+        return restTemplate.getForObject("http://ratings-data-service/ratingsdata/user/" + userId, UserRating.class);
+    }
+
+    @HystrixCommand(fallbackMethod = "getMovieInformationFallback")
+    private Movie getMovieInformation(Rating rating) {
+        return restTemplate.getForObject("http://movie-info-service/movies/" + rating.getMovieId(), Movie.class);
+    }
+
+    private UserRating getUserRatingInformationFallback(String userId) {
+        return new UserRating();
+    }
+
+    private Movie getMovieInformationFallback(Rating rating) {
+        return new Movie();
     }
 }
 
